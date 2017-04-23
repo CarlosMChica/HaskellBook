@@ -1,0 +1,8 @@
+module Cipher where
+
+import Data.Char
+
+caesar :: String -> Int -> String
+caesar [] _     = []
+caesar (x : xs) spaces = (chr . shift . ord $ x) : caesar xs spaces
+                      where shift x = (x + spaces + ord 'a' - 1) `mod` ord 'z'

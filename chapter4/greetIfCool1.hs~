@@ -1,0 +1,9 @@
+module GreetIfCool1 where
+
+greeIfCool :: String -> IO ()
+greeIfCool coolness = 
+  if cool
+    then putStrLn "eyyyy. What's shakin'?"
+  else
+    putStrLn "pshhhh."
+  where cool = coolness == "downright frosty yo"
