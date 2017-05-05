@@ -3,6 +3,9 @@ module Phone  where
 import Data.Maybe
 import Data.Char
 import Data.Monoid
+import qualified Data.Map as Map
+import Data.List
+import Data.Tuple
 
 convo :: [String]
 convo =
@@ -67,29 +70,57 @@ phone = makePhone layout
 capitalization :: (Digit, Presses)
 capitalization = ('*', 1)
 
-data Keyboard = Keyboard [(Char, [(Digit, Presses)])] deriving (Show)
+data Keyboard = Keyboard (Map.Map Char [(Digit, Presses)]) deriving (Show)
 data DaPhone = DaPhone Keyboard deriving (Show)
 
 type Digit = Char
 type Presses = Int
 
 makePhone :: [(Char, (Digit, Presses))] -> DaPhone
-makePhone xs = DaPhone (Keyboard (capitalize =<< xs))
+makePhone xs = DaPhone (Keyboard (Map.fromList $ capitalize =<< xs))
   where
     capitalize :: (Char, (Digit, Presses)) -> [(Char, [(Digit, Presses)])]
-    capitalize (y, z) = case isAlpha y of
-      True  -> [(y, [z]), (toUpper y, [capitalization, z])]
-      False -> [(y, [z])]
+    capitalize (y, z) = 
+      if isAlpha y 
+      then [(y, [z]), (toUpper y, [capitalization, z])]
+      else [(y, [z])]
 
 reverseTaps :: DaPhone -> Char -> [(Digit, Presses)]
-reverseTaps (DaPhone (Keyboard xs)) x = fromMaybe [] . lookup x $ xs
+reverseTaps (DaPhone (Keyboard xs)) x = fromMaybe [] . Map.lookup x $ xs
 
-cellPhonesDead :: DaPhone
-               -> String
-               -> [(Digit, Presses)]
+cellPhonesDead :: DaPhone -> String -> [(Digit, Presses)]
 cellPhonesDead phone = foldMap (reverseTaps phone)
 
 fingerTaps :: [(Digit, Presses)] -> Presses
 fingerTaps = sum . fmap snd
 
-main = mapM_ print . fmap (cellPhonesDead phone) $ convo
+mostPopularLetterWithCount :: String -> (Char, Int)
+mostPopularLetterWithCount xs =
+  swap . maximum . fmap swap . Map.toList . Map.fromListWith (+) $ [(x, 1) | x <- xs, not . isSpace $ x]
+
+mostPopularWordWithCount :: String -> (String, Int)
+mostPopularWordWithCount xs =
+  swap . maximum . fmap swap . Map.toList . Map.fromListWith (+) $ [(x, 1) | x <- words xs]
+
+mostPopularLetter :: String -> Char
+mostPopularLetter = fst. mostPopularLetterWithCount
+
+mostPopularWord :: String -> String
+mostPopularWord = fst . mostPopularWordWithCount
+
+coolestLtr :: [String] -> Char
+coolestLtr = mostPopularLetter . concat
+
+coolestWord :: [String] -> String
+coolestWord = mostPopularWord . unwords
+
+main = do
+  mapM_ print . fmap (cellPhonesDead phone) $ convo
+  print "Most popular letter in each sentence"
+  mapM_ print . fmap mostPopularLetter $ convo
+  print "Coolest letter in the text"
+  print . coolestLtr $ convo
+  print "Most popular word in each sentence"
+  mapM_ print . fmap mostPopularWord $ convo
+  print "Coolest word in the text"
+  print . coolestWord $ convo
