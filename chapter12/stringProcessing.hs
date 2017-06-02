@@ -1,4 +1,4 @@
-module ChapterExercises where
+module StringProcessing where
 
 notThe :: String -> Maybe String
 notThe xs
