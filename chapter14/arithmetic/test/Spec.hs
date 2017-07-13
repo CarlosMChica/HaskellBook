@@ -3,6 +3,7 @@ module Main where
 import Test.QuickCheck
 import Test.QuickCheck.Function (apply, Fun(..))
 import Data.List (sort)
+import Data.Char (toUpper)
 
 -- 1
 half x = x / 2
@@ -98,6 +99,42 @@ prop_takeLengthNotEqualsN n xs = length (take n xs) == n
 prop_readShow :: String -> Bool
 prop_readShow x = (read . show) x == x
 
+-- Failure
+square x = x * x
+prop_square_sqrt_identity :: Positive Float -> Bool
+prop_square_sqrt_identity (Positive x) = (square . sqrt) x == x
+
+-- Idempotence
+twice :: (a -> a) -> (a -> a)
+twice f = f . f
+fourTimes :: (a -> a) -> (a -> a)
+fourTimes = twice . twice
+
+-- 1
+capitalizeWord :: String -> String
+capitalizeWord = fmap toUpper
+
+f1 :: String -> Bool
+f1 x =
+  (capitalizeWord x == twice capitalizeWord x)
+  && (fourTimes capitalizeWord x == capitalizeWord x)
+
+--2
+f2 :: [Int] -> Bool
+f2 x =
+  (sort x == twice sort x)
+  && (fourTimes sort x == sort x)
+
+-- Datatypes Gen
+
+data Fool = Fulse | Frue deriving (Eq, Show)
+
+genFool :: Gen Fool
+genFool = oneof [return Fulse, return Frue]
+
+genFool2 :: Gen Fool
+genFool2 = frequency [(2, return Fulse), (1, return Frue)]
+
 main :: IO ()
 main = do
   putStrLn ""
@@ -135,3 +172,9 @@ main = do
   quickCheck prop_takeLengthNotEqualsN
   putStrLn "readShow"
   quickCheck prop_readShow
+  putStrLn "squareSqrt"
+  quickCheck prop_square_sqrt_identity
+  putStrLn "idempotencef1"
+  quickCheck f1
+  putStrLn "idempotencef2"
+  quickCheck f2
