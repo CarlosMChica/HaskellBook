@@ -5,6 +5,10 @@ import Data.Char
 caesar :: Int -> String -> String
 caesar spaces = fmap (caesarChar spaces)
 
+unCaesar :: String -> Int -> String
+unCaesar []     _      = []
+unCaesar (x:xs) spaces = shift x spaces (-) : unCaesar xs spaces
+
 caesarChar :: Int -> Char -> Char
 caesarChar = shift (+)
 
