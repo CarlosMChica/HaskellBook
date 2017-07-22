@@ -9,7 +9,7 @@ import Data.List (intersperse)
 import System.Exit (exitSuccess)
 import System.Random (randomRIO)
 
-newtype WordList = 
+newtype WordList =
   WordList [String]
   deriving (Eq, Show)
 

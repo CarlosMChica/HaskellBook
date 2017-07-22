@@ -4,7 +4,7 @@ module Lib
 where
 
 import Data.Char
-import Control.Applicative
+import Control.Applicative()
 
 type Key = String
 type PlainText = String
