@@ -15,7 +15,7 @@ monoidLeftIdentity m = mempty <> m == m
 type S = String
 type B = Bool
 
-main = do
+sampleCheckMonoidsProps = do
   quickCheck (monoidAssoc :: S -> S -> S -> B)
   quickCheck (monoidLeftIdentity :: S -> B)
   quickCheck (monoidRightIdentity :: S -> B)
