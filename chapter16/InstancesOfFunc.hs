@@ -1,14 +1,9 @@
 module InstancesOfFunc where
 
+import FunctorLaws
 import Test.QuickCheck
 import Test.QuickCheck.Function
 import Data.List
-
-functorIdentity :: (Eq (f a), Functor f) => f a -> Bool
-functorIdentity f = fmap id f == f
-
-functorCompose :: (Eq (f c), Functor f) => Fun a b -> Fun b c -> f a -> Bool
-functorCompose (Fun _ f) (Fun _ g) x = fmap (g . f) x == (fmap g . fmap f $ x)
 
 -- 1.
 
