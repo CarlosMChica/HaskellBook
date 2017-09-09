@@ -113,7 +113,7 @@ type FourCompose = Fun Int String -> Fun String Bool -> Four Int Int Int Int -> 
 
 -- 7.
 
-data Four' a b = Four' a a a b
+data Four' a b = Four' a a a b deriving (Eq, Show)
 
 instance Functor (Four' a) where
   fmap f (Four' w x y z) = Four' w x y (f z)
