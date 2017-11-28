@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# OPTIONS -Wall #-}
 module Lookups where
 

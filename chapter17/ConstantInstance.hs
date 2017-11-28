@@ -8,5 +8,3 @@ instance Functor (Constant a) where
 instance Monoid a => Applicative (Constant a) where
   pure _ = Constant mempty
   _ <*>  (Constant x) = Constant $ x
-
-

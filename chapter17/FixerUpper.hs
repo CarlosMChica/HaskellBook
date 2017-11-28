@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# OPTIONS -Wall #-}
+
 module FixerUpper where
 
 -- 1. const <$> Just "Hello" <*> "World"
