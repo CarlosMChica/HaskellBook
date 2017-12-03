@@ -24,15 +24,6 @@ instance Applicative List where
   Nil       <*> _   = Nil
   Cons f fs <*> xs   = (f <$> xs) <> (fs <*> xs)
 
-instance (Eq a) => EqProp (List a) where (=-=) = eq
-
-instance (Arbitrary a) => Arbitrary (List a) where
-  arbitrary = do
-    x <- arbitrary
-    xs <- arbitrary
-    frequency $ [(1, return Nil),
-                 (2, return $ Cons x xs)]
-
 append :: List a -> List a -> List a
 append Nil ys         = ys
 append (Cons x xs) ys = Cons x (append xs ys)
@@ -56,13 +47,6 @@ newtype ZipList' a =
   ZipList' (List a)
   deriving (Eq, Show)
 
-instance Eq a => EqProp (ZipList' a) where
-  xs =-= ys = xs' `eq` ys'
-    where xs' = let (ZipList' l) = xs
-                in take' 3000 l
-          ys' = let (ZipList' l) = ys
-                in take' 3000 l
-
 instance Functor ZipList' where
   fmap f (ZipList' xs) = ZipList' $ fmap f xs
 
@@ -83,6 +67,24 @@ instance Applicative ZipList' where
 instance Arbitrary a => Arbitrary (ZipList' a) where
   arbitrary = ZipList' <$> arbitrary
 
+instance (Eq a) => EqProp (List a) where (=-=) = eq
+
+instance Eq a => EqProp (ZipList' a) where
+  xs =-= ys = xs' `eq` ys'
+    where xs' = let (ZipList' l) = xs
+                in take' 3000 l
+          ys' = let (ZipList' l) = ys
+                in take' 3000 l
+
+instance (Arbitrary a) => Arbitrary (List a) where
+  arbitrary = frequency $
+    [
+      (1, return Nil),
+      (2, Cons <$> arbitrary <*> arbitrary)
+    ]
+
+--instance Arbitrary a => Arbitrary (List a) where
+--  arbitrary = Cons <$> arbitrary <*> arbitrary
 trigger = undefined :: List (Int, Int, Int)
 trigger' = undefined :: ZipList' (Int, Int, Int)
 
