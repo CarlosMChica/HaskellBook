@@ -1,5 +1,6 @@
 module ListApplicative where
 
+import           Data.Monoid
 import           Test.QuickCheck
 import           Test.QuickCheck.Checkers
 import           Test.QuickCheck.Classes
@@ -11,12 +12,17 @@ data List a =
 
 instance Functor List where
   fmap _ Nil         = Nil
-  fmap f (Cons x xs) = Cons (f x) (fmap f xs)
+  fmap f (Cons x xs) = Cons (f x) (f <$> xs)
+
+instance Monoid (List a) where
+  mempty = Nil
+  xs `mappend` ys = xs `append` ys
 
 instance Applicative List where
-  pure x = Cons x Nil
-  (Cons f fs) <*>  xs = append (fmap f xs) (fs <*>  xs)
-  _ <*>  _                     = Nil
+  pure x            = Cons x Nil
+  _         <*> Nil = Nil
+  Nil       <*> _   = Nil
+  Cons f fs <*> xs   = (f <$> xs) <> (fs <*> xs)
 
 instance (Eq a) => EqProp (List a) where (=-=) = eq
 
@@ -42,9 +48,9 @@ flatMap :: (a -> List b) -> List a -> List b
 flatMap f = concat' . fmap f
 
 take' :: Int -> List a -> List a
-take' n (Cons x xs) = Cons x $ take' (n - 1) xs
-take' 0 _           = Nil
 take' _ Nil         = Nil
+take' 0 _           = Nil
+take' n (Cons x xs) = Cons x $ take' (n - 1) xs
 
 newtype ZipList' a =
   ZipList' (List a)
@@ -60,10 +66,19 @@ instance Eq a => EqProp (ZipList' a) where
 instance Functor ZipList' where
   fmap f (ZipList' xs) = ZipList' $ fmap f xs
 
+repeat' :: a -> List a
+repeat' x = Cons x $ repeat' x
+
+zipWith' :: (a -> b -> c) -> (List a) -> (List b) -> (List c)
+zipWith' _ Nil _                   = Nil
+zipWith' _ _ Nil                   = Nil
+zipWith' f (Cons x xs) (Cons y ys) = Cons (f x y) (zipWith' f xs ys)
+
 instance Applicative ZipList' where
-  pure x = ZipList' $ pure x
-  (ZipList' (Cons f fs)) <*>  (ZipList' (Cons x xs)) = ZipList' $ Cons (f x) (fs <*> xs)
-  _                      <*>   _                     = ZipList' Nil
+  pure x                           = ZipList' $ repeat' x
+  _ <*> (ZipList' Nil)             = ZipList' Nil
+  (ZipList' Nil) <*> _             = ZipList' Nil
+  (ZipList' xs)  <*> (ZipList' ys) = ZipList' (zipWith' id xs ys)
 
 instance Arbitrary a => Arbitrary (ZipList' a) where
   arbitrary = ZipList' <$> arbitrary
