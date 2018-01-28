@@ -2,6 +2,11 @@
 {-# LANGUAGE QuasiQuotes       #-}
 module ChapterExercises.Log where
 
+{- TODO
+if you want to get wild, add a bidirectional text generator for the datatype you’re using to represent the data
+then write a `Gen` for and the constituent data to generate random schedules to see if it sums weird data correctly
+you’d want to make a special `Gen` for “activities”, not just random text.
+-}
 import           Control.Applicative
 import           Data.List
 import qualified Data.Map.Strict     as Map
@@ -96,8 +101,8 @@ parseEntries day = some parseParsedEntry
               try (manyTill (noneOf "\n") (skipComment))
           <|> (many $ noneOf "\n")
 
-parseParsedLogDay :: Parser ParsedLogDay
-parseParsedLogDay = do
+parseLogDay :: Parser ParsedLogDay
+parseLogDay = do
   skipMarker
   day <- parseDay
   entries <- parseEntries day
@@ -105,8 +110,9 @@ parseParsedLogDay = do
   where skipMarker = char '#' >> space
 
 parseLog :: Parser ParsedLog
-parseLog = skipComments >> some parseParsedLogDay
+parseLog = skipComments >> some parseLogDay
 
+-- TODO: Clean up this method
 unmarshallLog :: ParsedLog -> Log
 unmarshallLog xs = xs >>= (\(ParsedLogDay day entries) -> return $ LogDay day $ logDays day entries)
   where logDays day entries = zipWith logDay' entries (tail entries ++  [lastParsedEntry day])
