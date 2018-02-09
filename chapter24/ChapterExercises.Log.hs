@@ -1,5 +1,7 @@
+{-# OPTIONS_GHC -fwarn-missing-signatures -fno-warn-name-shadowing -fwarn-incomplete-patterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
+
 module ChapterExercises.Log where
 
 {- TODO
@@ -10,8 +12,6 @@ you’d want to make a special `Gen` for “activities”, not just random text.
 import           Control.Applicative
 import           Data.List
 import qualified Data.Map.Strict     as Map
-import           Data.Monoid
-import           Data.Time
 import           Data.Time
 import           Text.RawString.QQ
 import           Text.Trifecta
@@ -65,7 +65,7 @@ skipWhitespace = skipMany (char ' ' <|> char '\n')
 skipComment :: Parser ()
 skipComment = do
   skipWhitespace
-  string "--"
+  _ <- string "--"
   skipMany (noneOf "\n")
   skipWhitespace
 
@@ -103,23 +103,29 @@ parseEntries day = some parseParsedEntry
 
 parseLogDay :: Parser ParsedLogDay
 parseLogDay = do
-  skipMarker
+  _ <- skipMarker
   day <- parseDay
   entries <- parseEntries day
   return $ ParsedLogDay day entries
   where skipMarker = char '#' >> space
 
 parseLog :: Parser ParsedLog
-parseLog = skipComments >> some parseLogDay
+parseLog = skipComments >> many parseLogDay
 
--- TODO: Clean up this method
 unmarshallLog :: ParsedLog -> Log
-unmarshallLog xs = xs >>= (\(ParsedLogDay day entries) -> return $ LogDay day $ logDays day entries)
-  where logDays day entries = zipWith logDay' entries (tail entries ++  [lastParsedEntry day])
-        lastParsedEntry day = ParsedEntry (UTCTime (addDays 1 day) 0) ""
-        logDay' (ParsedEntry start act) (ParsedEntry start' _) = LogDayEntry start end (diffUTCTime end start) act
-          where end = (addUTCTime (diffUTCTime start' start) start)
+unmarshallLog = fmap unmarshallLogDay
 
+unmarshallLogDay :: ParsedLogDay -> LogDay
+unmarshallLogDay (ParsedLogDay day parsedEntries) = LogDay day $ unmarshallEntries parsedEntries
+  where unmarshallEntries entries = zipWith umarshallEntry entries $ entriesFromSecondUntilEndOfDay entries
+        entriesFromSecondUntilEndOfDay entries = tail entries ++ [endOfDayEntry day]
+        endOfDayEntry day = ParsedEntry (nextDayMidnight day) ""
+        nextDayMidnight day = UTCTime (addDays 1 day) 0
+
+umarshallEntry :: ParsedEntry -> ParsedEntry -> LogDayEntry
+umarshallEntry (ParsedEntry start act) (ParsedEntry start' _) = LogDayEntry start end duration act
+  where end      = (addUTCTime (diffUTCTime start' start) start)
+        duration = diffUTCTime end start
 
 totalTimePerActivity :: Log  -> [TimePerActivity]
 totalTimePerActivity log = timePerActivity <$> Map.toList (Map.fromListWith (+) timePerEntry)
@@ -163,28 +169,38 @@ logSample = [r|
 21:00 Dinner
 21:15 Read
 22:00 Sleep
+-- wheee a comment
 
 
 
 |]
 
+emptyLog :: String
+emptyLog = [r|
+
+-- wheee a comment
+
+|]
+
 main :: IO ()
-main = do
-  let (Success parsedLog) = parseString parseLog mempty logSample
-      log  = unmarshallLog parsedLog
-  putStrLn "***********************"
-  putStrLn "Parsed Log"
-  putStrLn "***********************"
-  mapM_ print parsedLog
-  putStrLn "***********************"
-  putStrLn "Processed Log"
-  putStrLn "***********************"
-  mapM_ print log
-  putStrLn "***********************"
-  putStrLn "Total time per activity"
-  putStrLn "***********************"
-  mapM_ print . totalTimePerActivity $ log
-  putStrLn "***********************"
-  putStrLn "Average time per activity per day"
-  putStrLn "***********************"
-  mapM_ print . averageTimePerActivityPerDay $ log
+main = case parsedLog of
+        Failure error -> print error
+        Success parsedLog -> do
+          log <- return $ unmarshallLog parsedLog
+          putStrLn "***********************"
+          putStrLn "Parsed Log"
+          putStrLn "***********************"
+          mapM_ print parsedLog
+          putStrLn "***********************"
+          putStrLn "Processed Log"
+          putStrLn "***********************"
+          mapM_ print log
+          putStrLn "***********************"
+          putStrLn "Total time per activity"
+          putStrLn "***********************"
+          mapM_ print . totalTimePerActivity $ log
+          putStrLn "***********************"
+          putStrLn "Average time per activity per day"
+          putStrLn "***********************"
+          mapM_ print . averageTimePerActivityPerDay $ log
+     where parsedLog = parseString parseLog mempty logSample
