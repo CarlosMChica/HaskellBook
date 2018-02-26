@@ -18,7 +18,7 @@ instance Applicative f => Applicative (EitherT e f) where
 
   (<*>) :: EitherT e f (a -> b) -> EitherT e f a -> EitherT e f b
 --  (EitherT meab) <*> (EitherT mea) = EitherT $ (<*>) <$> meab <*> mea
-  (EitherT meab) <*> (EitherT mea) = EitherT $ liftA2 (<*>) meab mea
+  (EitherT feab) <*> (EitherT fea) = EitherT $ liftA2 (<*>) feab fea
 
 --3.
 instance Monad f => Monad (EitherT e f) where
