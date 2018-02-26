@@ -1,8 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# OPTIONS_GHC -Wall #-}
 
 module MaybeT where
-
-import           Control.Applicative
 
 newtype MaybeT m a = MaybeT { runMaybeT :: m (Maybe a) }
 
@@ -18,13 +17,13 @@ instance (Applicative f) => Applicative (MaybeT f) where
 --  (MaybeT fmh) <*> (MaybeT fmx) = MaybeT $ liftA2 (<*>) fmh fmx
   (MaybeT fmh) <*> (MaybeT fmx) = MaybeT $ (<*>) <$> fmh <*> fmx
 
-instance (Monad f) => Monad (MaybeT f) where
-  return :: a -> MaybeT f a
+instance (Monad m) => Monad (MaybeT m) where
+  return :: a -> MaybeT m a
   return = pure
 
-  (>>=) :: MaybeT f a -> (a -> MaybeT f b) -> MaybeT f b
-  MaybeT fma >>= amtb = MaybeT $ do
-    ma <- fma
+  (>>=) :: MaybeT m a -> (a -> MaybeT m b) -> MaybeT m b
+  MaybeT mma >>= amtb = MaybeT $ do
+    ma <- mma
     case ma of
       Just x    -> runMaybeT . amtb $ x
-      otherwise -> return Nothing
+      _         -> return Nothing
