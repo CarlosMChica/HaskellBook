@@ -2,10 +2,8 @@
 module Morra where
 
 import           Control.Applicative
-import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
-import           Data.Int
 import           Data.List
 import           Data.Semigroup
 import           System.Random
@@ -42,11 +40,11 @@ playHand p@(P1 _) = hint *> (Hand p <$> readLn)
   where hint = putStr "Show fingers: "
 
 playTurn :: Side -> IO Turn
-playTurn side = (liftA2 playTurn' (P1) (P2 . oposite)) $ side
+playTurn = (liftA2 playTurn' (P1) (P2 . oposite))
   where playTurn' p1 p2 = liftA2 Turn (playHand p1) (playHand p2)
 
 congratulate :: Player -> IO ()
-congratulate player = printWith " " ["Congrats", showPlayer player, "you win"]
+congratulate p = printWith " " ["Congrats", showPlayer p, "you win"]
 
 showPlayer :: Player -> String
 showPlayer (P1 _) = "P1"
@@ -70,10 +68,6 @@ oposite Evens = Odds
 printWith :: String -> [String] -> IO ()
 printWith separator = putStrLn . concat . intersperse separator
 
-play' :: IO ()
-play' = chooseSide >>= playTurn >>= whoWin' >>= congratulate
-  where whoWin' turn = (showScore turn) *> (return . whoWin $ turn)
-
 data GameState = GameState
   {
     p1Score :: Int,
@@ -81,8 +75,8 @@ data GameState = GameState
   }
 
 incrementScore :: Player -> GameState -> GameState
-incrementScore (P1 _) state    = state { p1Score = (p1Score state) + 1}
-incrementScore (P2    _) state = state { p2Score    = (p2Score state) + 1}
+incrementScore (P1 _) game    = game { p1Score = (p1Score game) + 1}
+incrementScore (P2    _) game = game { p2Score = (p2Score game) + 1}
 
 showTurn :: Turn -> IO ()
 showTurn turn = do
@@ -104,10 +98,10 @@ play = do
   get >>= liftIO . showScore'
 
 showScore' :: GameState -> IO ()
-showScore' state = do
-  printWith " " ["P1 score:", show . p1Score $ state,
+showScore' game = do
+  printWith " " ["P1 score:", show . p1Score $ game,
                  "-",
-                 "P2 score", show . p2Score $ state]
+                 "P2 score", show . p2Score $ game]
 
 continue :: IO Bool
 continue = do
@@ -119,11 +113,11 @@ main' = repeatGame
 
 repeatGame  :: IO ()
 repeatGame = go (GameState 0 0)
-  where go state = do
-           nextState <- liftIO $ execStateT play state
+  where go game = do
+           nextState <- liftIO $ execStateT play game
            cont <- liftIO continue
            if cont then (go nextState) else return ()
 
-mp2n :: IO ()
-mp2n = do
-  evalStateT (mapM_ (const play) [1..]) $ GameState 0 0
+main :: IO ()
+main = do
+  evalStateT (mapM_ (const play) [(1 :: Int)..]) $ GameState 0 0
