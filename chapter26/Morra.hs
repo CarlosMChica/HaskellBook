@@ -3,6 +3,7 @@ module Morra where
 
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.Int
 import           Data.List
@@ -10,61 +11,57 @@ import           Data.Semigroup
 import           System.Random
 
 data Side = Odds | Evens deriving (Read, Eq)
-data Player = Human { side :: Side} | AI { side :: Side}
+data Player = P1 { side :: Side} | P2 { side :: Side}
 data Hand = Hand {
     player  :: Player,
     fingers :: Int
   }
 data Turn = Turn {
-    human :: Hand,
-    ai    :: Hand
+    p1Hand :: Hand,
+    p2Hand :: Hand
   }
 
 
-sideFromInt :: Int -> Side
-sideFromInt x = if even x then Evens else Odds
-
-winnerSide :: (Turn -> Hand) -> (Turn -> Hand) -> Turn -> Side
-winnerSide p1 p2 = side' . getSum <$> (handFingers p1) `mappend` (handFingers p2)
+winnerSide :: Turn -> Side
+winnerSide = side' . getSum <$> (handFingers p1Hand) `mappend` (handFingers p2Hand)
   where handFingers hand = Sum <$> fingers . hand
         side' x = if even x then Evens else Odds
 
 whoPlays :: Side -> Turn -> Player
-whoPlays side' turn = if humanSide turn == side' then human' else ai'
-  where human' = player . human $ turn
-        ai'    = player . ai $ turn
-        humanSide = side . player . human
+whoPlays side' turn = if p1Side turn == side' then p1 else p2
+  where p1 = player . p1Hand $ turn
+        p2 = player . p2Hand $ turn
+        p1Side = side . player . p1Hand
 
 whoWin :: Turn -> Player
-whoWin inTurn = whoPlays winnerSide' inTurn
-  where winnerSide' = winnerSide human ai inTurn
+whoWin turn = whoPlays (winnerSide turn) turn
 
 playHand :: Player -> IO Hand
-playHand p@(AI    _) = Hand p <$> randomRIO (1, 5)
-playHand p@(Human _) = hint *> (Hand p <$> readLn)
-  where hint = putStrLn "Show fingers:"
+playHand p@(P2    _) = Hand p <$> randomRIO (1, 5)
+playHand p@(P1 _) = hint *> (Hand p <$> readLn)
+  where hint = putStr "Show fingers: "
 
 playTurn :: Side -> IO Turn
-playTurn side = (liftA2 playTurn' (Human) (AI . oposite)) $ side
-  where playTurn' human ai = liftA2 Turn (playHand human) (playHand ai)
+playTurn side = (liftA2 playTurn' (P1) (P2 . oposite)) $ side
+  where playTurn' p1 p2 = liftA2 Turn (playHand p1) (playHand p2)
 
 congratulate :: Player -> IO ()
 congratulate player = printWith " " ["Congrats", showPlayer player, "you win"]
 
 showPlayer :: Player -> String
-showPlayer (Human _) = "Human"
-showPlayer (AI _)    = "AI"
+showPlayer (P1 _) = "P1"
+showPlayer (P2 _) = "P2"
 
 showScore :: Turn -> IO ()
 showScore turn = do
-  showHandScore human
-  showHandScore ai
+  showHandScore p1Hand
+  showHandScore p2Hand
   where showHandFingers = show . fingers
         showHandScore hand = printWith " " [showPlayer . player . hand $ turn, showHandFingers . hand $ turn, "fingers"]
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
-  where hint = putStrLn "Choose side: Odds - Evens?"
+  where hint = putStr "Choose side: Odds - Evens? "
 
 oposite :: Side -> Side
 oposite Odds  = Evens
@@ -77,11 +74,56 @@ play' :: IO ()
 play' = chooseSide >>= playTurn >>= whoWin' >>= congratulate
   where whoWin' turn = (showScore turn) *> (return . whoWin $ turn)
 
-play :: IO ()
-play = chooseSide' >=> playTurn >=> whoWin' >=> congratulate $ trigger
-  where chooseSide' = const chooseSide
-        whoWin'     = showScore *> return . whoWin
-        trigger     = undefined
+data GameState = GameState
+  {
+    p1Score :: Int,
+    p2Score :: Int
+  }
 
-main :: IO ()
-main = play'
+incrementScore :: Player -> GameState -> GameState
+incrementScore (P1 _) state    = state { p1Score = (p1Score state) + 1}
+incrementScore (P2    _) state = state { p2Score    = (p2Score state) + 1}
+
+showTurn :: Turn -> IO ()
+showTurn turn = do
+  printWith " " ["P1 fingers:", show p1Fingers,
+                 "-",
+                 "P2 fingers:", show p2Fingers,
+                 "-",
+                 "Total fingers:", show totalFingers
+                 ]
+    where p1Fingers = fingers . p1Hand $ turn
+          p2Fingers = fingers . p2Hand $ turn
+          totalFingers = p1Fingers + p2Fingers
+
+play  :: StateT GameState IO ()
+play = do
+  turn <- liftIO $ chooseSide >>= playTurn
+  liftIO $ showTurn turn
+  modify . incrementScore . whoWin $ turn
+  get >>= liftIO . showScore'
+
+showScore' :: GameState -> IO ()
+showScore' state = do
+  printWith " " ["P1 score:", show . p1Score $ state,
+                 "-",
+                 "P2 score", show . p2Score $ state]
+
+continue :: IO Bool
+continue = do
+  putStrLn "Continue?"
+  readLn
+
+main' :: IO ()
+main' = repeatGame
+
+repeatGame  :: IO ()
+repeatGame = go (GameState 0 0)
+  where go state = do
+           nextState <- liftIO $ execStateT play state
+           cont <- liftIO continue
+           if cont then (go nextState) else return ()
+
+mp2n :: IO ()
+mp2n = do
+  evalStateT (mapM_ (const play) [1..]) $ GameState 0 0
