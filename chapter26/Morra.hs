@@ -5,7 +5,6 @@ import           Control.Applicative
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.List
-import           Data.Semigroup
 import           System.Random
 
 data Side = Odds | Evens deriving (Read, Eq)
@@ -19,20 +18,18 @@ data Turn = Turn {
     p2Hand :: Hand
   }
 
+winner :: Turn -> Player
+winner = liftA3 playerInSide
+                (player . p1Hand)
+                (player . p2Hand)
+                (winner . totalFingers)
+  where totalFingers :: Turn -> Int
+        totalFingers = liftA2 (+) (fingers . p1Hand) (fingers . p2Hand)
+        winner :: Int -> Side
+        winner count = if even count then Evens else Odds
 
-winnerSide :: Turn -> Side
-winnerSide = side' . getSum <$> (handFingers p1Hand) `mappend` (handFingers p2Hand)
-  where handFingers hand = Sum <$> fingers . hand
-        side' x = if even x then Evens else Odds
-
-whoPlays :: Side -> Turn -> Player
-whoPlays side' turn = if p1Side turn == side' then p1 else p2
-  where p1 = player . p1Hand $ turn
-        p2 = player . p2Hand $ turn
-        p1Side = side . player . p1Hand
-
-whoWin :: Turn -> Player
-whoWin turn = whoPlays (winnerSide turn) turn
+playerInSide :: Player -> Player -> Side -> Player
+playerInSide p1 p2 side' = if side p1 == side' then p1 else p2
 
 playHand :: Player -> IO Hand
 playHand p@(P2    _) = Hand p <$> randomRIO (1, 5)
@@ -40,22 +37,8 @@ playHand p@(P1 _) = hint *> (Hand p <$> readLn)
   where hint = putStr "Show fingers: "
 
 playTurn :: Side -> IO Turn
-playTurn = (liftA2 playTurn' (P1) (P2 . oposite))
+playTurn = (liftA2 playTurn' P1 (P2 . oposite))
   where playTurn' p1 p2 = liftA2 Turn (playHand p1) (playHand p2)
-
-congratulate :: Player -> IO ()
-congratulate p = printWith " " ["Congrats", showPlayer p, "you win"]
-
-showPlayer :: Player -> String
-showPlayer (P1 _) = "P1"
-showPlayer (P2 _) = "P2"
-
-showScore :: Turn -> IO ()
-showScore turn = do
-  showHandScore p1Hand
-  showHandScore p2Hand
-  where showHandFingers = show . fingers
-        showHandScore hand = printWith " " [showPlayer . player . hand $ turn, showHandFingers . hand $ turn, "fingers"]
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
@@ -78,6 +61,19 @@ incrementScore :: Player -> GameState -> GameState
 incrementScore (P1 _) game    = game { p1Score = (p1Score game) + 1}
 incrementScore (P2    _) game = game { p2Score = (p2Score game) + 1}
 
+play :: Side -> StateT GameState IO ()
+play p1Side = do
+  turn <- liftIO $ playTurn p1Side
+  liftIO $ showTurn turn
+  modify . incrementScore . winner $ turn
+  get >>= liftIO . showScore
+
+showScore :: GameState -> IO ()
+showScore game =
+  printWith " " ["P1 score:", show . p1Score $ game,
+                 "-",
+                 "P2 score", show . p2Score $ game]
+
 showTurn :: Turn -> IO ()
 showTurn turn = do
   printWith " " ["P1 fingers:", show p1Fingers,
@@ -90,34 +86,24 @@ showTurn turn = do
           p2Fingers = fingers . p2Hand $ turn
           totalFingers = p1Fingers + p2Fingers
 
-play  :: StateT GameState IO ()
-play = do
-  turn <- liftIO $ chooseSide >>= playTurn
-  liftIO $ showTurn turn
-  modify . incrementScore . whoWin $ turn
-  get >>= liftIO . showScore'
-
-showScore' :: GameState -> IO ()
-showScore' game = do
-  printWith " " ["P1 score:", show . p1Score $ game,
-                 "-",
-                 "P2 score", show . p2Score $ game]
-
 continue :: IO Bool
 continue = do
   putStrLn "Continue?"
   readLn
 
-main' :: IO ()
-main' = repeatGame
-
-repeatGame  :: IO ()
-repeatGame = go (GameState 0 0)
+repeatGame  :: Side -> IO ()
+repeatGame p1Side = go (GameState 0 0)
   where go game = do
-           nextState <- liftIO $ execStateT play game
+           nextState <- liftIO $ execStateT (play p1Side) game
            cont <- liftIO continue
            if cont then (go nextState) else return ()
 
+main' :: IO ()
+main' = do
+  p1Side <- chooseSide
+  repeatGame p1Side
+
 main :: IO ()
 main = do
-  evalStateT (mapM_ (const play) [(1 :: Int)..]) $ GameState 0 0
+  evalStateT (mapM_ play' [(1 :: Int)..]) $ GameState 0 0
+  where play' = const (liftIO chooseSide >>= play)
