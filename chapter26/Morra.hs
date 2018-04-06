@@ -72,7 +72,7 @@ playTurn mode = liftA2 playTurn'
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
-  putStr "1.- Human-Human *** 2.- Human-Computer: "
+  putStr "1.- Human vs Human *** 2.- Human vs Computer: "
   mode <- (readLn :: IO Int)
   case mode of
     1 -> return $ GameMode Human Human
