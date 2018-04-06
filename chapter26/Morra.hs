@@ -29,7 +29,9 @@ data Turn = Turn {
     p2Hand :: Hand
   }
 
-
+instance Show Player where
+  show (P1 _) = "P1"
+  show (P2 _) = "P2"
 
 winner :: Turn -> Player
 winner = liftA3 playerInSide
@@ -45,11 +47,10 @@ playerInSide :: Player -> Player -> Side -> Player
 playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
 
 playHand :: Player -> IO Hand
-playHand = abc
-  where hint = putStr "Show fingers: "
-        abc player = case character . playerData $ player of
-          Human    -> hint *> (Hand player <$> readLn)
-          Computer -> Hand player <$> randomRIO (1, 5)
+playHand player = case character . playerData  $ player of
+  Computer -> Hand player <$> randomRIO (1,5)
+  Human    -> hint *> (Hand player <$> readLn)
+  where hint = putStrWith " " [show player, "show fingers: "]
 
 playTurn :: GameMode -> Side -> IO Turn
 playTurn mode = liftA2 playTurn'
@@ -59,7 +60,7 @@ playTurn mode = liftA2 playTurn'
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
-  putStr "1.- Human-Human * 2.- Human-Computer"
+  putStr "1.- Human-Human *** 2.- Human-Computer: "
   mode <- (readLn :: IO Int)
   case mode of
     1 -> return $ GameMode Human Human
@@ -67,14 +68,20 @@ chooseGameMode = do
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
-  where hint = putStr "Choose side: Odds - Evens? "
+  where hint = putStrWith " " ["P1", "choose side: Odds - Evens? "]
 
 oposite :: Side -> Side
 oposite Odds  = Evens
 oposite Evens = Odds
 
-printWith :: String -> [String] -> IO ()
-printWith separator = putStrLn . concat . intersperse separator
+putStrWith :: String -> [String] -> IO ()
+putStrWith = printWith putStr
+
+putStrLnWith :: String -> [String] -> IO ()
+putStrLnWith = printWith putStrLn
+
+printWith :: (String -> IO ()) -> String -> [String] -> IO ()
+printWith f separator = f . concat . intersperse separator
 
 data GameState = GameState
   {
@@ -88,13 +95,13 @@ incrementScore (P2 _) game = game { p2Score = (p2Score game) + 1}
 
 showScore :: GameState -> IO ()
 showScore game =
-  printWith " " ["P1 score:", show . p1Score $ game,
+  putStrLnWith " " ["P1 score:", show . p1Score $ game,
                  "-",
-                 "P2 score", show . p2Score $ game]
+                 "P2 score:", show . p2Score $ game]
 
 showTurn :: Turn -> IO ()
 showTurn turn = do
-  printWith " " ["P1 fingers:", show p1Fingers,
+  putStrLnWith " " ["P1 fingers:", show p1Fingers,
                  "-",
                  "P2 fingers:", show p2Fingers,
                  "-",
@@ -120,16 +127,18 @@ repeatGame  :: GameMode -> Side -> IO ()
 repeatGame mode p1Side = go (GameState 0 0)
   where go gameState = do
            nextState <- liftIO $ execStateT (play mode p1Side) gameState
-           cont <- liftIO continue
-           if cont then (go nextState) else return ()
+           continue >>= \continue -> if continue then go nextState else return ()
+
+initGame :: IO (GameMode, Side)
+initGame = liftA2 (,) chooseGameMode chooseSide
 
 main' :: IO ()
 main' = do
-  mode <- chooseGameMode
-  p1Side <- chooseSide
+  (mode, p1Side) <- initGame
   repeatGame mode p1Side
 
 main :: IO ()
 main = do
-  evalStateT (mapM_ play' [(1 :: Int)..]) $ GameState 0 0
-  where play' = const $ liftA2 play (liftIO chooseGameMode) (liftIO chooseSide)
+  (mode, p1Side) <- initGame
+  evalStateT (mapM_ (play' mode p1Side) [(1 :: Int)..]) $ GameState 0 0
+    where play' mode side = const $ play mode side
