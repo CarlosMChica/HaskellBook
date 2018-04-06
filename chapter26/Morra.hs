@@ -2,6 +2,7 @@
 module Morra where
 
 import           Control.Applicative
+import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
 import           Data.List
@@ -11,7 +12,7 @@ data GameMode = GameMode
   { p1Character :: Character,
     p2Character :: Character
   }
-data Character = Human | Computer deriving Show
+data Character = Human | Computer deriving (Eq, Show)
 data Side = Odds | Evens deriving (Read, Eq)
 data Player = P1 { playerData :: PlayerData} |
               P2 { playerData :: PlayerData}
@@ -33,6 +34,9 @@ instance Show Player where
   show (P1 _) = "P1"
   show (P2 _) = "P2"
 
+isHuman :: Player -> Bool
+isHuman p = Human == (character . playerData $ p)
+
 winner :: Turn -> Player
 winner = liftA3 playerInSide
                 (player . p1Hand)
@@ -48,9 +52,17 @@ playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
 
 playHand :: Player -> IO Hand
 playHand player = case character . playerData  $ player of
-  Computer -> Hand player <$> randomRIO (1,5)
-  Human    -> hint *> (Hand player <$> readLn)
-  where hint = putStrWith " " [show player, "show fingers: "]
+  Computer -> playComputerHand
+  Human    -> playHumanHand
+  where playComputerHand = Hand player <$> randomRIO (1,5)
+        playHumanHand = interstitial *> hint *> (Hand player <$> readLn)
+          where hint = putStrWith " " [show player, "show fingers: "]
+                interstitial = if hasToShowInterstitial then showInterstitial else showNothing
+                hasToShowInterstitial = case player of
+                  (P2 _)    | isHuman player -> True
+                  otherwise -> False
+                showInterstitial = replicateM_ 100 (putStrLn "")
+                showNothing = return ()
 
 playTurn :: GameMode -> Side -> IO Turn
 playTurn mode = liftA2 playTurn'
