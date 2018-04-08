@@ -86,8 +86,8 @@ playTurn mode p1Moves = liftA2 playTurn'
                        (P1 . PlayerData (p1Character mode))
                        (P2 . PlayerData (p2Character mode) . oposite)
   where playTurn' p1 p2 = do
-          (p1Hand, moves) <- playHand p1 p2 p1Moves
-          (p2Hand, moves2) <- playHand p2 p1 p1Moves
+          (p1Hand, moves) <- playHand p1 p1Moves
+          (p2Hand, moves2) <- playHand p2 p1Moves
           return (Turn p1Hand p2Hand, moves)
 
 chooseGameMode :: IO GameMode
