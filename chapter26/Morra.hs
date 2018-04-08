@@ -10,10 +10,7 @@ import           Control.Monad.Trans.State
 import           Data.List
 import           System.Random
 
-data GameMode = GameMode
-  { p1Character :: Character,
-    p2Character :: Character
-  }
+data GameMode = HumanVsHuman | HumanVsComputer
 data Character = Human | Computer deriving (Eq, Show)
 data Side = Odds | Evens deriving (Read, Eq)
 data Player = P1 { playerData :: PlayerData} |
@@ -21,6 +18,8 @@ data Player = P1 { playerData :: PlayerData} |
 
 data PlayerData = PlayerData {
     character :: Character,
+    moves     :: [Int],
+    score     :: Int,
     side      :: Side
   }
 data Hand = Hand {
@@ -52,11 +51,12 @@ playerInSide :: Player -> Player -> Side -> Player
 playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
 playerInSide p2@(P2 p2Data) p1 side' = if side p2Data == side' then p2 else p1
 
-playHand :: Player -> [Int] -> IO (Hand, [Int])
-playHand player p1Moves = case character . playerData  $ player of
+playHand :: Player -> GameState -> IO (Hand, [Int])
+playHand player state = case character . playerData  $ player of
   Computer -> playComputerHand
   Human    -> playHumanHand
-  where playComputerHand = do
+  where p1Moves = moves . playerData . p1 $ state
+        playComputerHand = do
           hasPattern <- discoveredPattern p1Moves
           hand <- Hand player <$> (if hasPattern then playComputerHandSmart else randomRIO (1,5))
           return (hand, [])
@@ -83,22 +83,25 @@ playHand player p1Moves = case character . playerData  $ player of
                 showInterstitial = replicateM_ 100 (putStrLn "")
                 showNothing = return ()
 
-playTurn :: GameMode -> [Int] -> Side -> IO (Turn, [Int])
-playTurn mode p1Moves = liftA2 playTurn'
-                       (P1 . PlayerData (p1Character mode))
-                       (P2 . PlayerData (p2Character mode) . oposite)
-  where playTurn' p1 p2 = do
-          (p1Hand, moves) <- playHand p1 p1Moves
-          (p2Hand, moves2) <- playHand p2 p1Moves
-          return (Turn p1Hand p2Hand, moves)
+playTurn :: GameState -> IO GameState
+playTurn initialState = playTurn'
+  where playTurn' = do
+          (p1Hand, moves) <- playHand (p1 initialState) initialState
+          (p2Hand, moves2) <- playHand (p2 initialState) initialState
+          let turn = (Turn p1Hand p2Hand)
+          return $ initialState {
+            turns = turns initialState ++ [turn],
+            p1 = p1 initialState,
+            p2 = p2 initialState
+            }
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
   putStr "1.- Human vs Human *** 2.- Human vs Computer: "
   mode <- (readLn :: IO Int)
   case mode of
-    1 -> return $ GameMode Human Human
-    2 -> return $ GameMode Human Computer
+    1 -> return $ HumanVsHuman
+    2 -> return $ HumanVsComputer
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
@@ -119,20 +122,28 @@ printWith f separator = f . concat . intersperse separator
 
 data GameState = GameState
   {
-    p1Moves :: [Int],
-    p1Score :: Int,
-    p2Score :: Int
+    mode  :: GameMode,
+    p1    :: Player,
+    p2    :: Player,
+    turns :: [Turn]
   }
 
+addTurn :: Turn -> GameState -> [Turn]
+addTurn turn gameState = turns gameState ++ [turn]
+
+incrementPlayerScore :: Player -> Player
+incrementPlayerScore player = player { playerData = incScore (playerData player) }
+  where incScore pData = pData { score = (score pData) + 1}
+
 incrementScore :: Player -> GameState -> GameState
-incrementScore (P1 _) game = game { p1Score = (p1Score game) + 1}
-incrementScore (P2 _) game = game { p2Score = (p2Score game) + 1}
+incrementScore player1@(P1 _) game = game { p1 = incrementPlayerScore player1}
+incrementScore player2@(P2 _) game = game { p2 = incrementPlayerScore player2}
 
 showScore :: GameState -> IO ()
-showScore game =
-  putStrLnWith " " ["P1 score:", show . p1Score $ game,
+showScore state =
+  putStrLnWith " " ["P1 score:", show . score . playerData . p1 $ state,
                  "-",
-                 "P2 score:", show . p2Score $ game]
+                 "P2 score:",show . score . playerData . p1 $ state]
 
 showTurn :: Turn -> IO ()
 showTurn turn = do
@@ -146,14 +157,14 @@ showTurn turn = do
           p2Fingers = fingers . p2Hand $ turn
           totalFingers = p1Fingers + p2Fingers
 
-play :: GameMode -> Side -> StateT GameState IO ()
-play mode p1Side = do
-  p1Moves <- p1Moves <$> get
-  (turn, moves) <- liftIO $ playTurn mode p1Moves p1Side
-  modify (\s -> s { p1Moves = moves })
-  liftIO $ putStrLnWith " " ["Accumlated moves:", show moves]
-  liftIO $ showTurn turn
-  modify . incrementScore . winner $ turn
+play :: StateT GameState IO ()
+play = do
+  initialState <- get
+  newstate <- liftIO $ playTurn initialState
+  liftIO $ putStrLnWith " " ["Accumlated moves:", show . moves . playerData . p1 $ newstate]
+  let lastTurn = last . turns $ newstate
+  liftIO $ showTurn lastTurn
+  modify . incrementScore . winner $ lastTurn
   get >>= liftIO . showScore
 
 continue :: IO Bool
@@ -161,22 +172,31 @@ continue = do
   putStrLn "Continue?"
   readLn
 
-repeatGame  :: GameMode -> Side -> IO ()
-repeatGame mode p1Side = go (GameState [] 0 0)
-  where go gameState = do
-           nextState <- liftIO $ execStateT (play mode p1Side) gameState
-           continue >>= \continue -> if continue then go nextState else return ()
+makeP1 :: Side -> Player
+makeP1 = P1 . PlayerData Human [] 0
 
-initGame :: IO (GameMode, Side)
-initGame = liftA2 (,) chooseGameMode chooseSide
+makeP2 :: GameMode -> Side -> Player
+makeP2 gameMode = P2 . PlayerData charFromMode [] 0
+  where charFromMode = case gameMode of
+          HumanVsHuman    -> Human
+          HumanVsComputer -> Computer
+
+makeGameState :: IO GameState
+makeGameState = do
+  gameMode <- chooseGameMode
+  p1Side <- chooseSide
+  return $ GameState gameMode (makeP1 p1Side) (makeP2 gameMode (oposite p1Side)) []
+
+
+repeatGame  :: IO ()
+repeatGame = makeGameState >>= go
+  where go game = do
+           nextState <- liftIO $ execStateT play game
+           cont <- continue
+           when cont (go nextState)
 
 main' :: IO ()
-main' = do
-  (mode, p1Side) <- initGame
-  repeatGame mode p1Side
+main' = repeatGame
 
 main :: IO ()
-main = do
-  (mode, p1Side) <- initGame
-  evalStateT (mapM_ (play' mode p1Side) [(1 :: Int)..]) $ GameState [] 0 0
-    where play' mode side = const $ play mode side
+main = makeGameState >>= evalStateT (mapM_ (const play) [(1 :: Int)..])
