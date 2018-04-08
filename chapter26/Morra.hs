@@ -1,4 +1,6 @@
+{-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE TupleSections #-}
+
 module Morra where
 
 import           Control.Applicative
@@ -41,14 +43,14 @@ winner :: Turn -> Player
 winner = liftA3 playerInSide
                 (player . p1Hand)
                 (player . p2Hand)
-                (winner . totalFingers)
+                (winnerSide . totalFingers)
   where totalFingers :: Turn -> Int
         totalFingers = liftA2 (+) (fingers . p1Hand) (fingers . p2Hand)
-        winner :: Int -> Side
-        winner count = if even count then Evens else Odds
+        winnerSide count = if even count then Evens else Odds
 
 playerInSide :: Player -> Player -> Side -> Player
 playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
+playerInSide p2@(P2 p2Data) p1 side' = if side p2Data == side' then p2 else p1
 
 playHand :: Player -> [Int] -> IO (Hand, [Int])
 playHand player p1Moves = case character . playerData  $ player of
@@ -76,8 +78,8 @@ playHand player p1Moves = case character . playerData  $ player of
           where hint = putStrWith " " [show player, "show fingers: "]
                 interstitial = if hasToShowInterstitial then showInterstitial else showNothing
                 hasToShowInterstitial = case player of
-                  (P2 _)    | isHuman player -> True
-                  otherwise -> False
+                  (P2 _) | isHuman player -> True
+                  _      -> False
                 showInterstitial = replicateM_ 100 (putStrLn "")
                 showNothing = return ()
 
