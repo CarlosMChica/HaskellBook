@@ -6,110 +6,91 @@ module Morra where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.State
+import           Control.Monad.Trans.State.Strict
 import           Data.List
 import           System.Random
 
-data GameMode = HumanVsHuman | HumanVsComputer
+data GameMode = HumanVsHuman | HumanVsComputer deriving Show
 data Character = Human | Computer deriving (Eq, Show)
-data Side = Odds | Evens deriving (Read, Eq)
+data Side = Odds | Evens deriving (Read, Eq, Show)
 data Player = P1 { playerData :: PlayerData} |
-              P2 { playerData :: PlayerData}
+              P2 { playerData :: PlayerData} deriving Show
 
 data PlayerData = PlayerData {
     character :: Character,
     moves     :: [Int],
     score     :: Int,
     side      :: Side
-  }
-data Hand = Hand {
-    player  :: Player,
-    fingers :: Int
-  }
-data Turn = Turn {
-    p1Hand :: Hand,
-    p2Hand :: Hand
-  }
+  } deriving Show
 
-instance Show Player where
-  show (P1 _) = "P1"
-  show (P2 _) = "P2"
+data Turn = Turn {
+    p1Fingers :: Int,
+    p2Fingers :: Int
+  } deriving Show
+
+data GameState = GameState
+  {
+    mode  :: GameMode,
+    p1    :: Player,
+    p2    :: Player,
+    turns :: [Turn]
+  } deriving Show
 
 isHuman :: Player -> Bool
 isHuman p = Human == (character . playerData $ p)
 
-winner :: Turn -> Player
+winner :: GameState -> Player
 winner = liftA3 playerInSide
-                (player . p1Hand)
-                (player . p2Hand)
-                (winnerSide . totalFingers)
+                p1
+                p2
+                (winnerSide . totalFingers . last . turns)
   where totalFingers :: Turn -> Int
-        totalFingers = liftA2 (+) (fingers . p1Hand) (fingers . p2Hand)
+        totalFingers = liftA2 (+) p1Fingers p2Fingers
         winnerSide count = if even count then Evens else Odds
 
-playerInSide :: Player -> Player -> Side -> Player
-playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
-playerInSide p2@(P2 p2Data) p1 side' = if side p2Data == side' then p2 else p1
-
-playHand :: Player -> GameState -> IO (Hand, [Int])
-playHand player state = case character . playerData  $ player of
-  Computer -> playComputerHand
-  Human    -> playHumanHand
-  where p1Moves = moves . playerData . p1 $ state
-        playComputerHand = do
-          hasPattern <- discoveredPattern p1Moves
-          hand <- Hand player <$> (if hasPattern then playComputerHandSmart else randomRIO (1,5))
-          return (hand, [])
-        discoveredPattern moves | length moves < 5 = return False
-        discoveredPattern moves = do
-          let tail = [last . init $ moves, last moves]
-              head = take 2 moves
-          hasPattern <- return $ head == tail
-          putStrLnWith " " ["Pattern discovered:", show hasPattern, "- HEAD", show head, "- TAIL", show tail]
-          return hasPattern
-        playComputerHandSmart = do
+playComputerHand :: GameState -> IO Int
+playComputerHand gameState = if canPlaySmart humanMoves then playComputerHandSmart humanMoves else randomRIO (1,5)
+  where humanMoves = moves . playerData . p1 $ gameState
+        canPlaySmart humanMoves | length humanMoves < 4 = False
+        canPlaySmart humanMoves = first2HumanMoves == last2HumanMoves
+          where last2HumanMoves = [last . init $ humanMoves, last humanMoves]
+                first2HumanMoves = take 2 humanMoves
+        playComputerHandSmart p1Moves = do
           smartPlay <- return $ last . take 3 $ p1Moves
           putStrLnWith " " ["Playing smart.", "Played ", show smartPlay]
           return smartPlay
-        playHumanHand = do
-          interstitial *> hint
-          fingers <- readLn
-          return $ (Hand player fingers, p1Moves ++ [fingers])
-          where hint = putStrWith " " [show player, "show fingers: "]
-                interstitial = if hasToShowInterstitial then showInterstitial else showNothing
-                hasToShowInterstitial = case player of
-                  (P2 _) | isHuman player -> True
-                  _      -> False
-                showInterstitial = replicateM_ 100 (putStrLn "")
-                showNothing = return ()
 
-playTurn :: GameState -> IO GameState
-playTurn initialState = playTurn'
-  where playTurn' = do
-          (p1Hand, moves) <- playHand (p1 initialState) initialState
-          (p2Hand, moves2) <- playHand (p2 initialState) initialState
-          let turn = (Turn p1Hand p2Hand)
-          return $ initialState {
-            turns = turns initialState ++ [turn],
-            p1 = p1 initialState,
-            p2 = p2 initialState
-            }
+playHumanHand :: Player -> IO Int
+playHumanHand player = do
+  interstitial *> hint
+  readLn
+  where hint = putStrWith " " [formatPlayer player, "show fingers: "]
+        interstitial = if hasToShowInterstitial then replicateM_ 100 (putStrLn "") else return ()
+        hasToShowInterstitial = case player of
+          (P2 _) | isHuman player -> True
+          _      -> False
+        formatPlayer (P1 _) = "P1"
+        formatPlayer (P2 _) = "P2"
+
+playTurn :: GameState -> IO Turn
+playTurn gameState = liftA2 Turn player1Hand player2Hand
+  where player1Hand = playHand $ p1 gameState
+        player2Hand = playHand $ p2 gameState
+        playHand player = case character . playerData  $ player of
+          Computer -> playComputerHand gameState
+          Human    -> playHumanHand player
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
   putStr "1.- Human vs Human *** 2.- Human vs Computer: "
-  mode <- (readLn :: IO Int)
-  case mode of
+  option <- (readLn :: IO Int)
+  case option of
     1 -> return $ HumanVsHuman
     2 -> return $ HumanVsComputer
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
   where hint = putStrWith " " ["P1", "choose side: Odds - Evens? "]
-
-oposite :: Side -> Side
-oposite Odds  = Evens
-oposite Evens = Odds
 
 putStrWith :: String -> [String] -> IO ()
 putStrWith = printWith putStr
@@ -120,63 +101,55 @@ putStrLnWith = printWith putStrLn
 printWith :: (String -> IO ()) -> String -> [String] -> IO ()
 printWith f separator = f . concat . intersperse separator
 
-data GameState = GameState
-  {
-    mode  :: GameMode,
-    p1    :: Player,
-    p2    :: Player,
-    turns :: [Turn]
-  }
-
-addTurn :: Turn -> GameState -> [Turn]
-addTurn turn gameState = turns gameState ++ [turn]
-
-incrementPlayerScore :: Player -> Player
-incrementPlayerScore player = player { playerData = incScore (playerData player) }
-  where incScore pData = pData { score = (score pData) + 1}
+playerInSide :: Player -> Player -> Side -> Player
+playerInSide p1@(P1 p1Data) p2 side' = if side p1Data == side' then p1 else p2
+playerInSide p2@(P2 p2Data) p1 side' = if side p2Data == side' then p2 else p1
 
 incrementScore :: Player -> GameState -> GameState
-incrementScore player1@(P1 _) game = game { p1 = incrementPlayerScore player1}
-incrementScore player2@(P2 _) game = game { p2 = incrementPlayerScore player2}
+incrementScore (P1 _) (GameState m pl1 pl2 ts) = GameState m (incrementP1Score pl1) pl2 ts
+  where incrementP1Score (P1 (PlayerData char moves score side)) = P1 $ PlayerData char moves (score + 1) side
+incrementScore (P2 _) (GameState m pl1 pl2 ts) = GameState m pl1 (incrementP2Score pl2) ts
+  where incrementP2Score (P2 (PlayerData char moves score side)) = P2 $ PlayerData char moves (score + 1) side
 
-showScore :: GameState -> IO ()
-showScore state =
-  putStrLnWith " " ["P1 score:", show . score . playerData . p1 $ state,
-                 "-",
-                 "P2 score:",show . score . playerData . p1 $ state]
+addTurn :: Turn -> GameState -> GameState
+addTurn t (GameState m pl1 pl2 ts) = GameState m pl1 pl2 (ts ++ [t])
 
-showTurn :: Turn -> IO ()
-showTurn turn = do
-  putStrLnWith " " ["P1:", show p1Fingers,
-                 "-",
-                 "P2:", show p2Fingers,
-                 "-",
-                 "Total:", show totalFingers
-                 ]
-    where p1Fingers = fingers . p1Hand $ turn
-          p2Fingers = fingers . p2Hand $ turn
-          totalFingers = p1Fingers + p2Fingers
+updatePlayers :: Turn -> GameState -> GameState
+updatePlayers t (GameState m pl1 pl2 ts) = GameState m (addMove pl1 $ p1Fingers t) (addMove pl2 $ p2Fingers t) ts
+  where addMove (P1 (PlayerData char moves score side)) move = P1 $ PlayerData char (moves ++ [move]) score side
+        addMove (P2 (PlayerData char moves score side)) move = P2 $ PlayerData char (moves ++ [move]) score side
+
 
 play :: StateT GameState IO ()
 play = do
-  initialState <- get
-  newstate <- liftIO $ playTurn initialState
-  liftIO $ putStrLnWith " " ["Accumlated moves:", show . moves . playerData . p1 $ newstate]
-  let lastTurn = last . turns $ newstate
-  liftIO $ showTurn lastTurn
-  modify . incrementScore . winner $ lastTurn
-  get >>= liftIO . showScore
-
+  gameState <- get
+  newTurn <- liftIO $ playTurn gameState
+  liftIO . showTurn $ newTurn
+  modify . addTurn $ newTurn
+  modify $ updatePlayers $ newTurn
+  newState <- get
+  modify $ incrementScore . winner $ newState
+  stateWithScore <- get
+  liftIO . showScore $ stateWithScore
+  where showScore gameState = putStrLnWith " " ["P1 score:", show . score . playerData . p1 $ gameState,
+                                                "-",
+                                                "P2 score:",show . score . playerData . p2 $ gameState]
+        showTurn turn = putStrLnWith " " ["P1:", show $ p1Fingers turn,
+                                           "-",
+                                           "P2:", show $ p2Fingers turn,
+                                           "-",
+                                           "Total:", show $ p1Fingers turn + p2Fingers turn
+                                         ]
 continue :: IO Bool
 continue = do
   putStrLn "Continue?"
   readLn
 
 makeP1 :: Side -> Player
-makeP1 = P1 . PlayerData Human [] 0
+makeP1 s = P1 $ PlayerData Human [] 0 s
 
 makeP2 :: GameMode -> Side -> Player
-makeP2 gameMode = P2 . PlayerData charFromMode [] 0
+makeP2 gameMode s = P2 $ PlayerData charFromMode [] 0 s
   where charFromMode = case gameMode of
           HumanVsHuman    -> Human
           HumanVsComputer -> Computer
@@ -186,7 +159,8 @@ makeGameState = do
   gameMode <- chooseGameMode
   p1Side <- chooseSide
   return $ GameState gameMode (makeP1 p1Side) (makeP2 gameMode (oposite p1Side)) []
-
+  where oposite Odds  = Evens
+        oposite Evens = Odds
 
 repeatGame  :: IO ()
 repeatGame = makeGameState >>= go
