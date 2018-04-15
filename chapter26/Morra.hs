@@ -17,7 +17,9 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State.Strict
 import           Data.Bool
 import           Data.List
+import           Data.Maybe
 import           Data.Monoid
+import           Debug.Trace
 import           System.Random
 
 data GameMode = HumanVsHuman | HumanVsComputer deriving Show
@@ -62,17 +64,46 @@ winner = liftA3 playerInSide
 boolf :: (a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
 boolf h f g x = if h x then f x else g x
 
+andf :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+andf f g x = f x && g x
+
 eqf :: Eq b => (a -> b) -> (a -> b) -> a -> Bool
 eqf f g x = f x == g x
 
-playComputerHand :: GameState -> IO Int
-playComputerHand = boolf canPlaySmart playSmart playRandom . humanMoves
-  where humanMoves = moves . playerData . p1
-        canPlaySmart = boolf ((>4) <$> length) (first2HumanMoves `eqf` last2HumanMoves) (const False)
-          where last2HumanMoves = sequence [last . init, last]
-                first2HumanMoves = take 2
-        playSmart p1Moves = do
-          smartPlay <- return $ last . take 3 $ p1Moves
+takeSafe :: Int -> [a] -> Maybe [a]
+takeSafe n xs | n == length xs = Just xs
+takeSafe n xs | length xs > n = go n xs
+  where go c ys | c > 0 = ([head ys] ++) <$> go (c - 1) (tail ys)
+        go _ ys = Just ys
+takeSafe _ _                  = Nothing
+
+takeLastSafe :: Int -> [a] -> Maybe [a]
+takeLastSafe n xs | n == length xs = Just xs
+takeLastSafe n xs | length xs > n = go n xs
+  where go c ys | c > 0 = (++ [last ys]) <$> go (c - 1) (init ys)
+        go _ ys = Just ys
+takeLastSafe _ _                  = Nothing
+
+elemAt :: Int -> [a] -> Maybe a
+elemAt n xs | length xs > 0 && length xs > n = Just $ xs !! n
+elemAt _ _  = Nothing
+
+safeInit :: [a] -> Maybe [a]
+safeInit xs | length xs > 1 = Just $ init xs
+safeInit _  = Nothing
+
+orElse :: Maybe a -> a -> a
+orElse mx x = maybe x id mx
+
+playComputerHand :: [Int] -> IO Int
+playComputerHand = boolf canPlaySmart playSmart playRandom
+  where canPlaySmart = liftA2 (\x y -> traceShow x x && traceShow y y)
+                              (\xs -> traceShow (xs) ((> 4) . length $ xs))
+                              (liftA2 (\xs ys -> xs == ys && isJust xs) first2HumanMoves last2HumanMoves)
+          where last2HumanMoves xs = traceShow (takeLastSafe 2 xs) (takeLastSafe 2 xs)
+                first2HumanMoves xs = traceShow (takeSafe 2 xs) (takeSafe 2 xs)
+        playSmart hMoves = do
+          smartPlay <- return $ elemAt 3 hMoves `orElse` 0
           putStrLnWith " " ["Playing smart.", "Played ", show smartPlay]
           return smartPlay
         playRandom = const $ randomRIO (1,5)
@@ -93,9 +124,11 @@ playTurn :: GameState -> IO Turn
 playTurn gameState = liftA2 Turn player1Hand player2Hand
   where player1Hand = playHand $ p1 gameState
         player2Hand = playHand $ p2 gameState
-        playHand player = case character . playerData  $ player of
-          Computer -> playComputerHand gameState
+        playHand player = case playerChar of
+          Computer -> playComputerHand humanMoves
           Human    -> playHumanHand player
+          where humanMoves = moves . playerData . p1 $ gameState
+                playerChar = character . playerData  $ player
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
