@@ -1,3 +1,11 @@
+#!/usr/bin/env stack
+{- stack
+  script
+  --resolver lts-11.5
+  --package random
+  --package transformers
+-}
+
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -8,6 +16,7 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State.Strict
 import           Data.List
+import           Data.Monoid
 import           System.Random
 
 data GameMode = HumanVsHuman | HumanVsComputer deriving Show
@@ -122,15 +131,13 @@ updatePlayers t (GameState m pl1 pl2 ts) = GameState m (addMove pl1 $ p1Fingers 
 
 play :: StateT GameState IO ()
 play = do
-  gameState <- get
-  newTurn <- liftIO $ playTurn gameState
+  newTurn <- get >>= liftIO . playTurn
   liftIO . showTurn $ newTurn
-  modify . addTurn $ newTurn
-  modify $ updatePlayers $ newTurn
-  newState <- get
-  modify $ incrementScore . winner $ newState
-  stateWithScore <- get
-  liftIO . showScore $ stateWithScore
+  modify $ appEndo $
+    (Endo $ (flip incrementScore) <*> winner) <>
+    (Endo $ updatePlayers newTurn) <>
+    (Endo $ addTurn newTurn)
+  get >>= liftIO . showScore
   where showScore gameState = putStrLnWith " " ["P1 score:", show . score . playerData . p1 $ gameState,
                                                 "-",
                                                 "P2 score:",show . score . playerData . p2 $ gameState]
