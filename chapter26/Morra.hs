@@ -24,7 +24,6 @@ data Side = Odds | Evens deriving (Read, Eq, Show)
 data Player = P1 { playerData :: PlayerData} |
               P2 { playerData :: PlayerData} deriving Show
 
-
 data PlayerData = PlayerData {
     character :: Character,
     moves     :: [Int],
@@ -56,39 +55,8 @@ winner = liftA3 playerInSide
   where totalFingers = liftA2 (+) p1Fingers p2Fingers
         playerInSide pl1 pl2 side' = if (side . playerData $ pl1) == side' then pl1 else pl2
 
-winnerSide :: Integral a => a -> Side
+winnerSide :: Int -> Side
 winnerSide count = if even count then Evens else Odds
-
-boolf :: (a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
-boolf h f g x = if h x then f x else g x
-
-andf :: (a -> Bool) -> (a -> Bool) -> a -> Bool
-andf f g x = f x && g x
-
-eqf :: Eq b => (a -> b) -> (a -> b) -> a -> Bool
-eqf f g x = f x == g x
-
-takeSafe :: Int -> [a] -> Maybe [a]
-takeSafe n xs | n <= length xs = Just $ take n xs
-takeSafe _ _  = Nothing
-
-takeLastSafe :: Int -> [a] -> Maybe [a]
-takeLastSafe n xs | n == length xs = Just xs
-takeLastSafe n xs | length xs > n = go n xs
-  where go c ys | c > 0 = (++ [last ys]) <$> go (c - 1) (init ys)
-        go _ _  = Just []
-takeLastSafe _ _                  = Nothing
-
-elemAt :: Int -> [a] -> Maybe a
-elemAt n xs | length xs > 0 && length xs > n = Just $ xs !! n
-elemAt _ _  = Nothing
-
-safeInit :: [a] -> Maybe [a]
-safeInit xs | length xs > 1 = Just $ init xs
-safeInit _  = Nothing
-
-orElse :: Maybe a -> a -> a
-orElse mx x = maybe x id mx
 
 playComputerHand :: GameState -> IO Int
 playComputerHand gameState = playSmart `orElse` playRandom
@@ -210,6 +178,24 @@ continue :: IO Bool
 continue = do
   putStrLn "Continue?"
   readLn
+
+takeSafe :: Int -> [a] -> Maybe [a]
+takeSafe n xs | n <= length xs = Just $ take n xs
+takeSafe _ _  = Nothing
+
+takeLastSafe :: Int -> [a] -> Maybe [a]
+takeLastSafe n xs | n == length xs = Just xs
+takeLastSafe n xs | length xs > n = go n xs
+  where go c ys | c > 0 = (++ [last ys]) <$> go (c - 1) (init ys)
+        go _ _  = Just []
+takeLastSafe _ _                  = Nothing
+
+elemAt :: Int -> [a] -> Maybe a
+elemAt n xs | length xs > 0 && length xs > n = Just $ xs !! n
+elemAt _ _  = Nothing
+
+orElse :: Maybe a -> a -> a
+orElse mx x = maybe x id mx
 
 makeP1 :: Side -> Player
 makeP1 s = P1 $ PlayerData Human [] 0 s
