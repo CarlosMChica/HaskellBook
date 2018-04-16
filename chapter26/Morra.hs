@@ -15,10 +15,7 @@ import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State.Strict
-import           Data.Bool
 import           Data.List
-import           Data.Maybe
-import           Data.Monoid
 import           System.Random
 
 data GameMode = HumanVsHuman | HumanVsComputer deriving Show
@@ -138,6 +135,7 @@ chooseGameMode = do
   case option of
     1 -> return $ HumanVsHuman
     2 -> return $ HumanVsComputer
+    _ -> chooseGameMode
 
 chooseSide :: IO Side
 chooseSide = hint *> readLn
@@ -152,45 +150,48 @@ putStrLnWith = printWith putStrLn
 printWith :: (String -> IO ()) -> String -> [String] -> IO ()
 printWith f separator = f . concat . intersperse separator
 
-incrementScore :: Player -> GameState -> GameState
-incrementScore (P1 _) (GameState m pl1 pl2 ts) = GameState m (incrementPScore pl1) pl2 ts
-incrementScore (P2 _) (GameState m pl1 pl2 ts) = GameState m pl1 (incrementPScore pl2) ts
+incrementScore :: GameState -> Player -> GameState
+incrementScore (GameState m pl1 pl2 ts) (P1 _) = GameState m (incrementPScore pl1) pl2 ts
+incrementScore (GameState m pl1 pl2 ts) (P2 _) = GameState m pl1 (incrementPScore pl2) ts
 
 
 incrementPScore :: Player -> Player
-incrementPScore player = player {
-                           playerData = (playerData player) {
-                                score = (score (playerData player)) + 1
-                                }
-                           }
+incrementPScore player = player
+  {
+    playerData = (playerData player)
+    {
+      score = (score (playerData player)) + 1
+    }
+  }
 
 addTurn :: Turn -> GameState -> GameState
 addTurn t (GameState m pl1 pl2 ts) = GameState m pl1 pl2 (ts ++ [t])
 
 updatePlayers :: Turn -> GameState -> GameState
 updatePlayers t (GameState m pl1 pl2 ts) = GameState m (addMove pl1 $ p1Fingers t) (addMove pl2 $ p2Fingers t) ts
-  where addMove (P1 (PlayerData char moves score side)) move = P1 $ PlayerData char (moves ++ [move]) score side
-        addMove (P2 (PlayerData char moves score side)) move = P2 $ PlayerData char (moves ++ [move]) score side
-
+  where addMove player move = player
+          {
+            playerData = (playerData player)
+            {
+              moves = (moves (playerData player)) ++ [move]
+            }
+          }
 
 play :: StateT GameState IO ()
 play = do
-  newTurn <- get >>= liftIO . playTurn
-  liftIO . showTurn $ newTurn
-  modify $ appEndo $
-    (Endo $ (flip incrementScore) <*> winner) <>
-    (Endo $ updatePlayers newTurn) <>
-    (Endo $ addTurn newTurn)
+  turn <- get >>= liftIO . playTurn
+  liftIO $ showTurn turn
+  modify $ (incrementScore <*> winner) . (updatePlayers turn) . (addTurn turn)
   get >>= liftIO . showScore
-  where showScore gameState = putStrLnWith " " ["P1 score:", show . score . playerData . p1 $ gameState,
-                                                "-",
-                                                "P2 score:",show . score . playerData . p2 $ gameState]
-        showTurn turn = putStrLnWith " " ["P1:", show $ p1Fingers turn,
-                                           "-",
-                                           "P2:", show $ p2Fingers turn,
-                                           "-",
-                                           "Total:", show $ p1Fingers turn + p2Fingers turn
-                                         ]
+  where showScore gameState = let p1Score = show . score . playerData . p1 $ gameState
+                                  p2Score = show . score . playerData . p2 $ gameState
+                              in  putStrLnWith " " ["P1 score:", p1Score, "-", "P2 score:", p2Score]
+
+        showTurn turn = let totalFingers = show $ p1Fingers turn + p2Fingers turn
+                            fingersP1 = show $ p1Fingers turn
+                            fingersP2 = show $ p2Fingers turn
+                        in  putStrLnWith " " ["P1:", fingersP1 , "-", "P2:", fingersP2, "-", "Total:", totalFingers]
+
 continue :: IO Bool
 continue = do
   putStrLn "Continue?"
