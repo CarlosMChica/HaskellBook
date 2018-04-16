@@ -70,17 +70,14 @@ eqf :: Eq b => (a -> b) -> (a -> b) -> a -> Bool
 eqf f g x = f x == g x
 
 takeSafe :: Int -> [a] -> Maybe [a]
-takeSafe n xs | n == length xs = Just xs
-takeSafe n xs | length xs > n = go n xs
-  where go c ys | c > 0 = ([head ys] ++) <$> go (c - 1) (tail ys)
-        go _ ys = Just ys
+takeSafe n xs | n <= length xs = Just $ take n xs
 takeSafe _ _                  = Nothing
 
 takeLastSafe :: Int -> [a] -> Maybe [a]
 takeLastSafe n xs | n == length xs = Just xs
 takeLastSafe n xs | length xs > n = go n xs
   where go c ys | c > 0 = (++ [last ys]) <$> go (c - 1) (init ys)
-        go _ ys = Just ys
+        go _ _ = Just []
 takeLastSafe _ _                  = Nothing
 
 elemAt :: Int -> [a] -> Maybe a
@@ -94,18 +91,24 @@ safeInit _  = Nothing
 orElse :: Maybe a -> a -> a
 orElse mx x = maybe x id mx
 
-playComputerHand :: [Int] -> IO Int
-playComputerHand = boolf canPlaySmart playSmart playRandom
-  where canPlaySmart = liftA2 (&&)
-                              ((>= 6) . length)
-                              (liftA2 (\xs ys -> xs == ys && isJust xs) first2HumanMoves last2HumanMoves)
-          where last2HumanMoves = takeLastSafe 2
-                first2HumanMoves = takeSafe 2
-        playSmart hMoves = do
-          smartPlay <- return $ elemAt 3 hMoves `orElse` 0
-          putStrLnWith " " ["Playing smart.", "Played ", show smartPlay]
-          return smartPlay
-        playRandom = const $ randomRIO (1,5)
+playComputerHand :: GameState -> IO Int
+playComputerHand gameState = playSmart `orElse` playRandom
+  where playSmart = if isComputerSide Odds then (smartGuess odd) else (smartGuess even)
+        smartGuess isWinnerGuess = do
+          firstMoves <- takeSafe 3 humanMoves
+          lastMoves <- takeLastSafe 3 humanMoves
+          humanMove <- elemAt 3 humanMoves
+          initialGuess <- elemAt 3 humanMoves
+          let canSmartGuess = firstMoves == lastMoves && length humanMoves >= 6
+          case canSmartGuess of
+              False -> Nothing
+              True  -> Just $ do
+                let guess = if isWinnerGuess (humanMove + initialGuess) then initialGuess else (succ initialGuess)
+                putStrLnWith "" ["Playing smart - Played: ", show guess]
+                return guess
+        isComputerSide side' = side' == (side . playerData . p2 $ gameState)
+        playRandom = randomRIO (1,5)
+        humanMoves = moves . playerData . p1 $ gameState
 
 playHumanHand :: Player -> IO Int
 playHumanHand player = do
@@ -124,10 +127,9 @@ playTurn gameState = liftA2 Turn player1Hand player2Hand
   where player1Hand = playHand $ p1 gameState
         player2Hand = playHand $ p2 gameState
         playHand player = case playerChar of
-          Computer -> playComputerHand humanMoves
+          Computer -> playComputerHand gameState
           Human    -> playHumanHand player
-          where humanMoves = moves . playerData . p1 $ gameState
-                playerChar = character . playerData  $ player
+          where playerChar = character . playerData  $ player
 
 chooseGameMode :: IO GameMode
 chooseGameMode = do
