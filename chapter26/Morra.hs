@@ -19,7 +19,6 @@ import           Data.Bool
 import           Data.List
 import           Data.Maybe
 import           Data.Monoid
-import           Debug.Trace
 import           System.Random
 
 data GameMode = HumanVsHuman | HumanVsComputer deriving Show
@@ -97,11 +96,11 @@ orElse mx x = maybe x id mx
 
 playComputerHand :: [Int] -> IO Int
 playComputerHand = boolf canPlaySmart playSmart playRandom
-  where canPlaySmart = liftA2 (\x y -> traceShow x x && traceShow y y)
-                              (\xs -> traceShow (xs) ((> 4) . length $ xs))
+  where canPlaySmart = liftA2 (&&)
+                              ((>= 6) . length)
                               (liftA2 (\xs ys -> xs == ys && isJust xs) first2HumanMoves last2HumanMoves)
-          where last2HumanMoves xs = traceShow (takeLastSafe 2 xs) (takeLastSafe 2 xs)
-                first2HumanMoves xs = traceShow (takeSafe 2 xs) (takeSafe 2 xs)
+          where last2HumanMoves = takeLastSafe 2
+                first2HumanMoves = takeSafe 2
         playSmart hMoves = do
           smartPlay <- return $ elemAt 3 hMoves `orElse` 0
           putStrLnWith " " ["Playing smart.", "Played ", show smartPlay]
