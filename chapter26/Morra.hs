@@ -54,8 +54,10 @@ winner = liftA3 playerInSide
                 p2
                 (winnerSide . totalFingers . last . turns)
   where totalFingers = liftA2 (+) p1Fingers p2Fingers
-        winnerSide count = if even count then Evens else Odds
         playerInSide pl1 pl2 side' = if (side . playerData $ pl1) == side' then pl1 else pl2
+
+winnerSide :: Integral a => a -> Side
+winnerSide count = if even count then Evens else Odds
 
 boolf :: (a -> Bool) -> (a -> b) -> (a -> b) -> a -> b
 boolf h f g x = if h x then f x else g x
@@ -68,13 +70,13 @@ eqf f g x = f x == g x
 
 takeSafe :: Int -> [a] -> Maybe [a]
 takeSafe n xs | n <= length xs = Just $ take n xs
-takeSafe _ _                  = Nothing
+takeSafe _ _  = Nothing
 
 takeLastSafe :: Int -> [a] -> Maybe [a]
 takeLastSafe n xs | n == length xs = Just xs
 takeLastSafe n xs | length xs > n = go n xs
   where go c ys | c > 0 = (++ [last ys]) <$> go (c - 1) (init ys)
-        go _ _ = Just []
+        go _ _  = Just []
 takeLastSafe _ _                  = Nothing
 
 elemAt :: Int -> [a] -> Maybe a
@@ -90,17 +92,19 @@ orElse mx x = maybe x id mx
 
 playComputerHand :: GameState -> IO Int
 playComputerHand gameState = playSmart `orElse` playRandom
-  where playSmart = if isComputerSide Odds then (smartGuess odd) else (smartGuess even)
-        smartGuess isWinnerGuess = do
-          firstMoves <- takeSafe 3 humanMoves
-          lastMoves <- takeLastSafe 3 humanMoves
-          humanMove <- elemAt 3 humanMoves
-          initialGuess <- elemAt 3 humanMoves
+  where playSmart = if isComputerSide Odds then smartGuess Odds else smartGuess Evens
+        smartGuess computerSide = do
+          firstMoves   <- takeSafe     3 humanMoves
+          lastMoves    <- takeLastSafe 3 humanMoves
+          humanMove    <- elemAt       3 humanMoves
+          initialGuess <- elemAt       3 humanMoves
           let canSmartGuess = firstMoves == lastMoves && length humanMoves >= 6
           case canSmartGuess of
               False -> Nothing
               True  -> Just $ do
-                let guess = if isWinnerGuess (humanMove + initialGuess) then initialGuess else (succ initialGuess)
+                let guess = if (computerSide == winnerSide (humanMove + initialGuess))
+                            then initialGuess
+                            else (succ initialGuess)
                 putStrLnWith "" ["Playing smart - Played: ", show guess]
                 return guess
         isComputerSide side' = side' == (side . playerData . p2 $ gameState)
@@ -141,19 +145,9 @@ chooseSide :: IO Side
 chooseSide = hint *> readLn
   where hint = putStrWith " " ["P1", "choose side: Odds - Evens? "]
 
-putStrWith :: String -> [String] -> IO ()
-putStrWith = printWith putStr
-
-putStrLnWith :: String -> [String] -> IO ()
-putStrLnWith = printWith putStrLn
-
-printWith :: (String -> IO ()) -> String -> [String] -> IO ()
-printWith f separator = f . concat . intersperse separator
-
 incrementScore :: GameState -> Player -> GameState
-incrementScore (GameState m pl1 pl2 ts) (P1 _) = GameState m (incrementPScore pl1) pl2 ts
-incrementScore (GameState m pl1 pl2 ts) (P2 _) = GameState m pl1 (incrementPScore pl2) ts
-
+incrementScore gameState (P1 _) = gameState { p1 = incrementPScore (p1 gameState) }
+incrementScore gameState (P2 _) = gameState { p2 = incrementPScore (p2 gameState) }
 
 incrementPScore :: Player -> Player
 incrementPScore player = player
@@ -168,7 +162,11 @@ addTurn :: Turn -> GameState -> GameState
 addTurn t (GameState m pl1 pl2 ts) = GameState m pl1 pl2 (ts ++ [t])
 
 updatePlayers :: Turn -> GameState -> GameState
-updatePlayers t (GameState m pl1 pl2 ts) = GameState m (addMove pl1 $ p1Fingers t) (addMove pl2 $ p2Fingers t) ts
+updatePlayers turn gameState = gameState
+  {
+    p1 = addMove (p1 gameState) (p1Fingers turn),
+    p2 = addMove (p2 gameState) (p2Fingers turn)
+  }
   where addMove player move = player
           {
             playerData = (playerData player)
@@ -183,28 +181,15 @@ play = do
   liftIO $ showTurn turn
   modify $ (incrementScore <*> winner) . (updatePlayers turn) . (addTurn turn)
   get >>= liftIO . showScore
-  where showScore gameState = let p1Score = show . score . playerData . p1 $ gameState
-                                  p2Score = show . score . playerData . p2 $ gameState
-                              in  putStrLnWith " " ["P1 score:", p1Score, "-", "P2 score:", p2Score]
-
-        showTurn turn = let totalFingers = show $ p1Fingers turn + p2Fingers turn
-                            fingersP1 = show $ p1Fingers turn
-                            fingersP2 = show $ p2Fingers turn
-                        in  putStrLnWith " " ["P1:", fingersP1 , "-", "P2:", fingersP2, "-", "Total:", totalFingers]
-
-continue :: IO Bool
-continue = do
-  putStrLn "Continue?"
-  readLn
-
-makeP1 :: Side -> Player
-makeP1 s = P1 $ PlayerData Human [] 0 s
-
-makeP2 :: GameMode -> Side -> Player
-makeP2 gameMode s = P2 $ PlayerData charFromMode [] 0 s
-  where charFromMode = case gameMode of
-          HumanVsHuman    -> Human
-          HumanVsComputer -> Computer
+  where showScore gameState =
+          let p1Score = show . score . playerData . p1
+              p2Score = show . score . playerData . p2
+          in  putStrLnWith " " ["P1 score:", p1Score gameState, "-", "P2 score:", p2Score gameState]
+        showTurn turn =
+          let totalFingers = show $ p1Fingers turn + p2Fingers turn
+              fingersP1 = show . p1Fingers
+              fingersP2 = show . p2Fingers
+          in  putStrLnWith " " ["P1:", fingersP1 turn , "-", "P2:", fingersP2 turn, "-", "Total:", totalFingers]
 
 makeGameState :: IO GameState
 makeGameState = do
@@ -220,6 +205,29 @@ repeatGame = makeGameState >>= go
            nextState <- liftIO $ execStateT play game
            cont <- continue
            when cont (go nextState)
+
+continue :: IO Bool
+continue = do
+  putStrLn "Continue?"
+  readLn
+
+makeP1 :: Side -> Player
+makeP1 s = P1 $ PlayerData Human [] 0 s
+
+makeP2 :: GameMode -> Side -> Player
+makeP2 gameMode s = P2 $ PlayerData charFromMode [] 0 s
+  where charFromMode = case gameMode of
+          HumanVsHuman    -> Human
+          HumanVsComputer -> Computer
+
+putStrWith :: String -> [String] -> IO ()
+putStrWith = printWith putStr
+
+putStrLnWith :: String -> [String] -> IO ()
+putStrLnWith = printWith putStrLn
+
+printWith :: (String -> IO ()) -> String -> [String] -> IO ()
+printWith f separator = f . concat . intersperse separator
 
 main' :: IO ()
 main' = repeatGame
