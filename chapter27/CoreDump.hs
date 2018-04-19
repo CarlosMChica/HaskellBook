@@ -56,7 +56,7 @@ main = do
   print $ forceNothing undefined -- Prints 0
   print $ forceNothing $ A undefined -- Prints 0
   print $ forceTest undefined -- Blows up
-  print $ forceTest $ A undefined -- Prints 0
+  print $ forceTest $ A undefined -- Prints 1
   print $ forceTest2 undefined -- Blows up
   print $ forceTest2 $ A undefined -- Blows up
   print $ forceTest2 $ A $ C undefined -- Blows up
