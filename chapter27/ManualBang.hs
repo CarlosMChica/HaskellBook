@@ -22,4 +22,9 @@ banging !b = 1
 --banging =
 --  \b_a1ib ->
 --    case b_a1ib of _
---                     { __DEFAULT -> I# 1# }} -> undefined} -> undefined -> undefined
+--                     { __DEFAULT -> I# 1# }}
+
+data Foo = Foo Int !Int
+
+first (Foo x _) = x
+second (Foo _ y) = y
