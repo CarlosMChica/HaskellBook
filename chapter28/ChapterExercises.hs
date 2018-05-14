@@ -55,3 +55,16 @@ main = defaultMain
   [ bench "concat list" $ whnf schlemiel 123456
   , bench "concat dlist" $ whnf constructDlist 123456
   ]
+
+data Queue a = Queue { enqueue :: [a]
+                     , dequeue :: [a]
+                     } deriving (Eq, Show)
+
+push :: a -> Queue a -> Queue a
+push x q = q { enqueue = x : enqueue q}
+
+pop :: Queue a -> Maybe (a, Queue a)
+pop (Queue [] []) = Nothing
+pop q = case dequeue q of
+    []     -> let (x : xs) = reverse . enqueue $ q in Just (x, Queue [] xs)
+    (x:xs) -> Just (x, Queue [] $ xs)
