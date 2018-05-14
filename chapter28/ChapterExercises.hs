@@ -67,4 +67,4 @@ pop :: Queue a -> Maybe (a, Queue a)
 pop (Queue [] []) = Nothing
 pop q = case dequeue q of
     []     -> let (x : xs) = reverse . enqueue $ q in Just (x, Queue [] xs)
-    (x:xs) -> Just (x, Queue [] $ xs)
+    (x:xs) -> Just (x, q { dequeue = xs})
