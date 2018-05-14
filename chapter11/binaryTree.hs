@@ -38,9 +38,10 @@ postOrder :: BinaryTree a -> [a]
 postOrder Leaf = []
 postOrder (Node left a right) = postOrder left ++ postOrder right ++ [a]
 
-foldTree :: (a -> b -> b -> b) -> b -> BinaryTree a -> b
+foldTree :: (a -> b -> b) -> b -> BinaryTree a -> b
 foldTree _ b Leaf = b
-foldTree f b (Node left a right) = f a (foldTree f b left) (foldTree f b right) 
+foldTree f b (Node Leaf a Leaf) = f a b
+foldTree f b (Node left _ right) = foldTree f (foldTree f b left) right
 
 testTree :: BinaryTree Integer
 testTree = Node (Node Leaf 1 Leaf) 2 (Node Leaf 3 Leaf)
