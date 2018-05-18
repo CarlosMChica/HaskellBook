@@ -9,21 +9,26 @@
   --package raw-strings-qq
   --package bytestring
   --package containers
+  --package directory
 -}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes       #-}
 
 module Data.Ini where
 
+import           Data.List
+import           System.Directory
+import           System.IO
 import           Control.Applicative
 import           Data.ByteString     (ByteString)
 import           Data.Char           (isAlpha)
 import           Data.Map            (Map)
 import qualified Data.Map            as M
-import           Data.Text           (Text)
+import           Data.Text           (Text, pack)
 import qualified Data.Text.IO        as TIO
 import           Test.Hspec
 import           Text.RawString.QQ
+import           Data.Text.Encoding (encodeUtf8)
 -- parsers 0.12.3, trifecta 1.5.2
 import           Text.Trifecta
 
@@ -115,6 +120,13 @@ parseIni :: Parser Config
 parseIni = Config <$> foldMap rollup <$> some parseSection
   where rollup :: Section -> Map Header Assignments
         rollup (Section h a) = M.singleton h a
+
+printInisDir :: String -> IO ()
+printInisDir path = do
+  fileNames <- fmap (path ++) <$> filter (isSuffixOf ".ini") <$> listDirectory path
+  fileContents <- traverse readFile fileNames
+  mapM_ print $ M.fromList $ fmap parseIni' <$> zip fileNames fileContents
+  where parseIni' = parseString parseIni mempty
 
 main :: IO ()
 main = do
