@@ -1,0 +1,46 @@
+name:                fingerd
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/githubuser/fingerd#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2018 Author name here
+category:            Web
+build-type:          Simple
+cabal-version:       >=1.10
+extra-source-files:  README.md
+
+executable debug
+  ghc-options:         -Wall
+  hs-source-dirs:      src
+  main-is:             Debug.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , network
+                     
+executable fingerd
+  ghc-options:         -Wall
+  hs-source-dirs:      src
+  main-is:             Main.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , bytestring
+                     , network
+                     , raw-strings-qq
+                     , sqlite-simple
+                     , text
+
+executable fingerd-adduser
+  ghc-options:         -Wall
+  hs-source-dirs:      src
+  main-is:             MainAdd.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , bytestring
+                     , network
+                     , raw-strings-qq
+                     , sqlite-simple
+                     , text
