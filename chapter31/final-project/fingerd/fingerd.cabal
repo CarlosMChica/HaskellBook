@@ -21,6 +21,18 @@ executable debug
   build-depends:       base >= 4.7 && < 5
                      , network
                      
+executable fingerd-serve-adduser
+  ghc-options:         -Wall
+  hs-source-dirs:      src
+  main-is:             MainServeAndAdd.hs
+  default-language:    Haskell2010
+  build-depends:       base >= 4.7 && < 5
+                     , bytestring
+                     , network
+                     , raw-strings-qq
+                     , sqlite-simple
+                     , text
+                     
 executable fingerd
   ghc-options:         -Wall
   hs-source-dirs:      src
